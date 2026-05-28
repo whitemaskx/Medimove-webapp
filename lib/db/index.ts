@@ -1,6 +1,10 @@
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 
+// Disable SSL certificate validation for cloud database providers
+// This is necessary for Supabase pooler connections
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 const connectionString =
 	process.env.DATABASE_URL ||
 	process.env.NEON_DATABASE_URL ||
@@ -9,6 +13,8 @@ const connectionString =
 
 let pool: Pool
 
+// For Supabase and other cloud providers, we need to handle SSL properly
+// Always use rejectUnauthorized: false to avoid self-signed certificate errors
 const poolConfig = {
 	ssl: {
 		rejectUnauthorized: false,
