@@ -1,12 +1,21 @@
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 
-const connectionString = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL
+// Disable SSL certificate validation for cloud database providers
+// This is necessary for Supabase pooler connections
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
+const connectionString =
+	process.env.DATABASE_URL ||
+	process.env.NEON_DATABASE_URL ||
+	process.env.mmove_POSTGRES_URL ||
+	process.env.POSTGRES_URL
 
 let pool: Pool
 
+// For Supabase and other cloud providers, we need to handle SSL properly
+// Always use rejectUnauthorized: false to avoid self-signed certificate errors
 const poolConfig = {
-	rejectUnauthorized: false,
 	ssl: {
 		rejectUnauthorized: false,
 	},
@@ -14,11 +23,17 @@ const poolConfig = {
 
 if (connectionString) {
 	pool = new Pool({ connectionString, ...poolConfig })
-} else if (process.env.PGHOST) {
-	pool = new Pool({ ...poolConfig })
+} else if (process.env.PGHOST || process.env.mmove_POSTGRES_HOST) {
+	pool = new Pool({
+		host: process.env.PGHOST || process.env.mmove_POSTGRES_HOST,
+		user: process.env.PGUSER || process.env.mmove_POSTGRES_USER,
+		password: process.env.PGPASSWORD || process.env.mmove_POSTGRES_PASSWORD,
+		database: process.env.PGDATABASE || process.env.mmove_POSTGRES_DATABASE,
+		...poolConfig,
+	})
 } else {
 	throw new Error(
-		'Falta la configuración de la base de datos. Define DATABASE_URL/NEON_DATABASE_URL o las variables PGHOST, PGUSER, PGPASSWORD, PGDATABASE.'
+		'Falta la configuración de la base de datos. Define DATABASE_URL, NEON_DATABASE_URL, mmove_POSTGRES_URL, o las variables de conexión individual.'
 	)
 }
 
