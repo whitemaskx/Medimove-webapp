@@ -543,6 +543,11 @@ export default function RutaMedica() {
   const [vistaRegistro, setVistaRegistro] = useState<"diario" | "semanal" | "mensual">("diario")
   const [mostrarRegistro, setMostrarRegistro] = useState(false)
 
+  // Estados para reservas de la base de datos
+  const [reservasRegistro, setReservasRegistro] = useState<any[]>([])
+  const [cargandoReservas, setCargandoReservas] = useState(false)
+  const [filtroRegistro, setFiltroRegistro] = useState<"todas" | "pendientes" | "completadas">("todas")
+
   // Estado para geolocalización
   const [ubicacionActual, setUbicacionActual] = useState<{ lat: number; lng: number } | null>(null)
   const [obteniendoUbicacion, setObteniendoUbicacion] = useState(false)
@@ -585,6 +590,34 @@ export default function RutaMedica() {
       setDescuentosActivos((prev) => ({ ...prev, terceraEdad: true }))
     }
   }, [datos.edad])
+
+  // Cargar reservas de la base de datos cuando se abre el modal de Registro
+  useEffect(() => {
+    if (!mostrarRegistro) return
+
+    const cargarReservas = async () => {
+      setCargandoReservas(true)
+      setErrorReservas("")
+      
+      try {
+        const response = await fetch("/api/todas-las-reservas")
+        const data = await response.json()
+        
+        if (data.success) {
+          setReservasRegistro(data.reservas || [])
+        } else {
+          setErrorReservas(data.error || "Error al cargar las reservas")
+        }
+      } catch (error) {
+        setErrorReservas("Error de conexión al cargar las reservas")
+        console.error("Error cargando reservas:", error)
+      } finally {
+        setCargandoReservas(false)
+      }
+    }
+
+    cargarReservas()
+  }, [mostrarRegistro])
 
   // Calcular distancia usando coordenadas del navegador
   const calcularDistancia = useCallback(async () => {
@@ -999,13 +1032,13 @@ export default function RutaMedica() {
           {showProgress && <StepIndicator steps={STEPS} currentStep={stepIndex} />}
         </header>
 
-        {/* Modal de Registro de Costos */}
+        {/* Modal de Registro de Reservas de la Base de Datos */}
         {mostrarRegistro && (
           <Card className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-emerald-600" />
-                <h2 className="text-lg font-semibold">Registro de Costos</h2>
+                <FileText className="h-5 w-5 text-emerald-600" />
+                <h2 className="text-lg font-semibold">Registro de Reservas</h2>
               </div>
               <button
                 onClick={() => setMostrarRegistro(false)}
@@ -1015,86 +1048,147 @@ export default function RutaMedica() {
               </button>
             </div>
 
-            {/* Selector de periodo */}
+            {/* Filtros */}
             <div className="flex gap-2 mb-4">
-              {(["diario", "semanal", "mensual"] as const).map((periodo) => (
+              {(["todas", "pendientes", "completadas"] as const).map((filtro) => (
                 <button
-                  key={periodo}
-                  onClick={() => setVistaRegistro(periodo)}
+                  key={filtro}
+                  onClick={() => setFiltroRegistro(filtro)}
                   className={cn(
                     "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-all capitalize",
-                    vistaRegistro === periodo
+                    filtroRegistro === filtro
                       ? "border-emerald-300 bg-emerald-50 text-emerald-700"
                       : "border-border hover:bg-muted"
                   )}
                 >
-                  {periodo}
+                  {filtro}
                 </button>
               ))}
             </div>
 
-            {/* Resumen de totales */}
-            {(() => {
-              const totales = calcularTotalesPeriodo()
-              return (
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="rounded-xl bg-emerald-50 p-3">
-                    <p className="text-xs text-muted-foreground">Total Viajes</p>
-                    <p className="text-xl font-bold text-emerald-700">{totales.totalViajes}</p>
-                  </div>
-                  <div className="rounded-xl bg-blue-50 p-3">
-                    <p className="text-xs text-muted-foreground">Total Km</p>
-                    <p className="text-xl font-bold text-blue-700">{totales.totalKm.toFixed(1)} km</p>
-                  </div>
-                  <div className="rounded-xl bg-purple-50 p-3">
-                    <p className="text-xs text-muted-foreground">Ingresos</p>
-                    <p className="text-xl font-bold text-purple-700">
-                      ${totales.totalIngresos.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-amber-50 p-3">
-                    <p className="text-xs text-muted-foreground">Descuentos</p>
-                    <p className="text-xl font-bold text-amber-700">
-                      ${totales.totalDescuentos.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              )
-            })()}
+            {/* Estado de carga */}
+            {cargandoReservas && (
+              <div className="text-center py-6">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-emerald-600" />
+                <p className="text-sm text-muted-foreground">Cargando reservas...</p>
+              </div>
+            )}
 
-            {/* Lista de viajes */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {filtrarViajesPorPeriodo().length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay viajes registrados en este periodo
+            {/* Mensaje de error */}
+            {errorReservas && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 mb-4">
+                <p className="text-sm text-destructive">{errorReservas}</p>
+              </div>
+            )}
+
+            {/* Resumen de reservas */}
+            {!cargandoReservas && reservasRegistro.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <p className="text-xs text-muted-foreground">Total Reservas</p>
+                  <p className="text-xl font-bold text-emerald-700">{reservasRegistro.length}</p>
+                </div>
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <p className="text-xs text-muted-foreground">Ingresos Total</p>
+                  <p className="text-xl font-bold text-blue-700">
+                    ${reservasRegistro.reduce((acc, r) => acc + (parseFloat(r.costo_total) || 0), 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de reservas */}
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {cargandoReservas ? null : reservasRegistro.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  No hay reservas registradas
                 </p>
               ) : (
-                filtrarViajesPorPeriodo().map((viaje) => (
-                  <div key={viaje.id} className="rounded-lg border border-border p-3 text-sm">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-medium">{viaje.paciente}</span>
-                      <span className="text-emerald-700 font-semibold">
-                        ${viaje.total.toLocaleString()}
-                      </span>
+                reservasRegistro
+                  .filter((reserva) => {
+                    if (filtroRegistro === "pendientes") return reserva.estado === "pendiente"
+                    if (filtroRegistro === "completadas") return reserva.estado !== "pendiente"
+                    return true
+                  })
+                  .map((reserva) => (
+                    <div
+                      key={reserva.id}
+                      className="rounded-lg border border-border p-4 text-sm hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-base">{reserva.nombre_paciente}</span>
+                            <Badge
+                              variant={
+                                reserva.estado === "pendiente" ? "warning" : "success"
+                              }
+                              className="text-[10px]"
+                            >
+                              {reserva.estado?.toUpperCase() || "PENDIENTE"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            ID: {reserva.numero_identificacion}
+                          </p>
+                        </div>
+                        <span className="text-base font-bold text-emerald-700">
+                          ${parseFloat(reserva.costo_total || 0).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mb-2 text-xs">
+                        <div>
+                          <p className="text-muted-foreground">Especialidad</p>
+                          <p className="font-medium">{reserva.especialidad}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Clínica</p>
+                          <p className="font-medium">{reserva.clinica_nombre}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Fecha Cita</p>
+                          <p className="font-medium">{reserva.fecha_cita} - {reserva.hora_cita}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Urgencia</p>
+                          <p className="font-medium capitalize">
+                            {reserva.nivel_urgencia || "Normal"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {reserva.vehiculo_tipo && (
+                          <Badge variant="outline" className="text-[10px]">
+                            🚗 {reserva.vehiculo_tipo}
+                          </Badge>
+                        )}
+                        {reserva.distancia_km && (
+                          <Badge variant="outline" className="text-[10px]">
+                            📍 {parseFloat(reserva.distancia_km).toFixed(1)} km
+                          </Badge>
+                        )}
+                        {reserva.tiene_acompanante && (
+                          <Badge variant="success" className="text-[10px]">
+                            👥 +1 acompañante
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-border/50 text-xs text-muted-foreground">
+                        <p>
+                          Consultación: ${parseFloat(reserva.costo_consulta || 0).toLocaleString()} | 
+                          Transporte: ${parseFloat(reserva.costo_transporte || 0).toLocaleString()}
+                        </p>
+                        <p className="mt-1">
+                          Registrado: {new Date(reserva.created_at).toLocaleString("es-CO")}
+                        </p>
+                        <p className="text-[9px]">Código: {reserva.codigo}</p>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {viaje.origen} → {viaje.destino}
-                    </p>
-                    <div className="flex gap-2 mt-1">
-                      <Badge variant="outline" className="text-[10px]">
-                        {viaje.distanciaKm.toFixed(1)} km
-                      </Badge>
-                      <Badge variant="outline" className="text-[10px]">
-                        {viaje.tipoVehiculo}
-                      </Badge>
-                      {viaje.tieneAcompanante && (
-                        <Badge variant="success" className="text-[10px]">
-                          +1 acomp.
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  ))
               )}
             </div>
           </Card>

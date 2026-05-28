@@ -71,8 +71,10 @@ async function crearTablaReservas(client: PoolClient) {
 export async function guardarReserva(data: ReservaData) {
   const client = await pool.connect()
   try {
+    // Crear tabla si no existe
     await crearTablaReservas(client)
 
+    // Validaciones
     if (!data.numeroIdentificacion?.trim()) throw new Error('Número de identificación requerido')
     if (!data.nombrePaciente?.trim()) throw new Error('Nombre del paciente requerido')
     if (!data.especialidad?.trim()) throw new Error('Especialidad requerida')
@@ -83,6 +85,7 @@ export async function guardarReserva(data: ReservaData) {
 
     const codigo = `RES${Date.now().toString().slice(-12)}`
 
+    // Ejecutar INSERT
     const result = await client.query(
       `INSERT INTO reservas (
         codigo, numero_identificacion, nombre_paciente, edad, sexo, tipo_regimen,
@@ -95,7 +98,7 @@ export async function guardarReserva(data: ReservaData) {
         estado
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
-      ) RETURNING id`,
+      ) RETURNING id, codigo, created_at`,
       [
         codigo,
         data.numeroIdentificacion.trim(),
@@ -127,9 +130,20 @@ export async function guardarReserva(data: ReservaData) {
       ]
     )
 
-    return { success: true, id: result.rows[0].id, codigo }
+    if (!result.rows[0]) {
+      throw new Error('No se pudo obtener la respuesta del INSERT')
+    }
+
+    console.log(`✓ Reserva guardada exitosamente: ${codigo}`)
+    
+    return { 
+      success: true, 
+      id: result.rows[0].id, 
+      codigo: result.rows[0].codigo,
+      created_at: result.rows[0].created_at
+    }
   } catch (error) {
-    console.error('Error guardando reserva:', error)
+    console.error('❌ Error guardando reserva:', error)
     return { success: false, error: error instanceof Error ? error.message : 'Error al guardar la reserva' }
   } finally {
     client.release()
@@ -141,16 +155,56 @@ export async function consultarReservas(numeroIdentificacion: string) {
   try {
     await crearTablaReservas(client)
 
+    // Normalizar entrada
+    const id = numeroIdentificacion.trim()
+    if (!id) {
+      return { success: false, error: 'Número de identificación es requerido' }
+    }
+
     const result = await client.query(
       `SELECT * FROM reservas
        WHERE numero_identificacion = $1
        ORDER BY created_at DESC`,
-      [numeroIdentificacion.trim()]
+      [id]
     )
-    return { success: true, reservas: result.rows }
+
+    console.log(`Consulta: ${id} - Registros encontrados: ${result.rows.length}`)
+    
+    return { 
+      success: true, 
+      reservas: result.rows,
+      total: result.rows.length
+    }
   } catch (error) {
-    console.error('Error consultando reservas:', error)
-    return { success: false, error: 'Error al consultar las reservas' }
+    console.error('❌ Error consultando reservas:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Error al consultar las reservas' }
+  } finally {
+    client.release()
+  }
+}
+
+// Función auxiliar para obtener TODAS las reservas (para debugging)
+export async function obtenerTodasLasReservas() {
+  const client = await pool.connect()
+  try {
+    await crearTablaReservas(client)
+
+    const result = await client.query(
+      `SELECT * FROM reservas
+       ORDER BY created_at DESC
+       LIMIT 100`
+    )
+
+    console.log(`Total de reservas en BD: ${result.rows.length}`)
+    
+    return { 
+      success: true, 
+      total: result.rows.length,
+      reservas: result.rows
+    }
+  } catch (error) {
+    console.error('❌ Error obteniendo reservas:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Error al obtener las reservas' }
   } finally {
     client.release()
   }
