@@ -4,16 +4,9 @@ import { pool } from '@/lib/db'
 export async function GET() {
   const client = await pool.connect()
   try {
-    // Eliminar tablas viejas si existen
-    await client.query(`DROP TABLE IF EXISTS reservas CASCADE`)
-    await client.query(`DROP TABLE IF EXISTS pacientes CASCADE`)
-    await client.query(`DROP TABLE IF EXISTS clinicas CASCADE`)
-    await client.query(`DROP TABLE IF EXISTS conductores CASCADE`)
-    await client.query(`DROP TABLE IF EXISTS test_inserts CASCADE`)
-
-    // Crear tabla unificada sin constraints problemáticos
+    // Solo crea la tabla si NO existe — nunca borra datos
     await client.query(`
-      CREATE TABLE reservas (
+      CREATE TABLE IF NOT EXISTS reservas (
         id SERIAL PRIMARY KEY,
         codigo VARCHAR(50) UNIQUE NOT NULL,
         numero_identificacion VARCHAR(50) NOT NULL,
@@ -46,7 +39,12 @@ export async function GET() {
       )
     `)
 
-    return NextResponse.json({ success: true, message: 'Base de datos inicializada correctamente' })
+    const { rows } = await client.query('SELECT COUNT(*) as total FROM reservas')
+    return NextResponse.json({
+      success: true,
+      message: 'Base de datos lista',
+      reservas_existentes: parseInt(rows[0].total),
+    })
   } catch (error) {
     console.error('Error inicializando DB:', error)
     return NextResponse.json(
