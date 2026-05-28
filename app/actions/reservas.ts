@@ -34,14 +34,16 @@ export interface ReservaData {
 async function obtenerOCrearPaciente(data: ReservaData) {
   const client = await pool.connect()
   try {
-    // Map sexo values to database constraint format (M/F)
+    // Map sexo values to database constraint format (lowercase: 'masculino', 'femenino', 'otro')
     let sexoValue: string | null = null
     if (data.sexo) {
       const sexoLower = data.sexo.toLowerCase()
       if (sexoLower === 'masculino' || sexoLower === 'm') {
-        sexoValue = 'M'
+        sexoValue = 'masculino'
       } else if (sexoLower === 'femenino' || sexoLower === 'f') {
-        sexoValue = 'F'
+        sexoValue = 'femenino'
+      } else if (sexoLower === 'otro' || sexoLower === 'o') {
+        sexoValue = 'otro'
       }
     }
 
