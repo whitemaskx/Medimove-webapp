@@ -202,7 +202,7 @@ interface Clinica {
   direccionCompleta: string
   especialidades: string[]
   rating: number
-  zona: "urbana" | "rural"
+  zona: string
 }
 
 interface Auto {
@@ -220,6 +220,11 @@ interface Auto {
 interface DistanciaResult {
   distancia: { km: number; texto: string }
   duracion: { minutos: number; texto: string }
+  zonaRural?: boolean
+  peajes?: { nombre: string; precio: number }[]
+  totalPeajes?: number
+  ruta?: { origen: string; destino: string; ciudad: string }
+  coordenadas?: { origen: { lat: number; lng: number }; destino: { lat: number; lng: number } }
 }
 
 interface RegistroViaje {
@@ -2149,7 +2154,7 @@ export default function RutaMedica() {
                     `$${(45000 + (autoSel ? costoTransporte.total : 0)).toLocaleString()} COP`,
                   ],
                 ]
-                  .filter(Boolean)
+                  .filter((x): x is [string, string | undefined] => Boolean(x))
                   .map(([key, value], i) => (
                     <div
                       key={i}
@@ -2385,11 +2390,15 @@ export default function RutaMedica() {
                         </div>
                         <div>
                           <span className="text-muted-foreground">Fecha:</span>
-                          <p className="font-medium">{reserva.fecha_cita}</p>
+                          <p className="font-medium">
+                            {reserva.fecha_cita instanceof Date
+                              ? reserva.fecha_cita.toLocaleDateString("es-CO")
+                              : String(reserva.fecha_cita)}
+                          </p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Hora:</span>
-                          <p className="font-medium">{reserva.hora_cita}</p>
+                          <p className="font-medium">{String(reserva.hora_cita ?? "")}</p>
                         </div>
                       </div>
 
