@@ -866,45 +866,78 @@ export default function RutaMedica() {
   // Guardar reserva en la base de datos
   async function procesarPago() {
     setGuardandoReserva(true)
+    setError("")
     
-    const reservaData = {
-      numeroIdentificacion: datos.identificacion,
-      nombrePaciente: datos.nombre,
-      edad: parseInt(datos.edad),
-      sexo: datos.sexo,
-      tipoRegimen: tipoRegimen,
-      clinicaNombre: cita.clinica?.nombre || "",
-      clinicaDireccion: cita.clinica?.dir || "",
-      clinicaId: cita.clinica?.id || undefined,
-      especialidad: cita.especialidad,
-      fechaCita: cita.fecha,
-      horaCita: cita.hora,
-      vehiculoTipo: autoSel?.tipo || undefined,
-      vehiculoModelo: autoSel?.descripcion || undefined,
-      vehiculoPlaca: `${autoSel?.tipo?.substring(0, 3).toUpperCase() || ""}${Math.floor(Math.random() * 900) + 100}` || undefined,
-      origenDireccion: origenDir || undefined,
-      destinoDireccion: cita.clinica?.dir || undefined,
-      distanciaKm: distanciaInfo?.distancia?.km || undefined,
-      costoConsulta: PRECIOS_CONSULTA[tipoRegimen],
-      costoTransporte: autoSel ? costoTransporte.total : undefined,
-      costoTotal: PRECIOS_CONSULTA[tipoRegimen] + (autoSel ? costoTransporte.total : 0),
-      sintomas: seleccionados.join(", "),
-      nivelUrgencia: resultado?.urgencia || undefined,
-      tieneAcompanante: tieneAcompanante,
-      descuentoTerceraEdad: descuentosActivos.terceraEdad,
-      descuentoDiscapacidad: descuentosActivos.discapacidad,
-      descuentoSubsidioEps: descuentosActivos.subsidioEPS,
-    }
-    
-    const result = await guardarReserva(reservaData)
-    
-    setGuardandoReserva(false)
-    
-    if (result.success) {
-      setStep(8) // Ir al paso de confirmación
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    } else {
-      setError("Error al procesar el pago. Intenta nuevamente.")
+    try {
+      const reservaData = {
+        numeroIdentificacion: datos.identificacion,
+        nombrePaciente: datos.nombre,
+        edad: parseInt(datos.edad),
+        sexo: datos.sexo,
+        tipoRegimen: tipoRegimen,
+        clinicaNombre: cita.clinica?.nombre || "",
+        clinicaDireccion: cita.clinica?.dir || "",
+        clinicaId: cita.clinica?.id || undefined,
+        especialidad: cita.especialidad,
+        fechaCita: cita.fecha,
+        horaCita: cita.hora,
+        vehiculoTipo: autoSel?.tipo || undefined,
+        vehiculoModelo: autoSel?.descripcion || undefined,
+        vehiculoPlaca: `${autoSel?.tipo?.substring(0, 3).toUpperCase() || ""}${Math.floor(Math.random() * 900) + 100}` || undefined,
+        origenDireccion: origenDir || undefined,
+        destinoDireccion: cita.clinica?.dir || undefined,
+        distanciaKm: distanciaInfo?.distancia?.km || undefined,
+        costoConsulta: PRECIOS_CONSULTA[tipoRegimen],
+        costoTransporte: autoSel ? costoTransporte.total : undefined,
+        costoTotal: PRECIOS_CONSULTA[tipoRegimen] + (autoSel ? costoTransporte.total : 0),
+        sintomas: seleccionados.join(", "),
+        nivelUrgencia: resultado?.urgencia || undefined,
+        tieneAcompanante: tieneAcompanante,
+        descuentoTerceraEdad: descuentosActivos.terceraEdad,
+        descuentoDiscapacidad: descuentosActivos.discapacidad,
+        descuentoSubsidioEps: descuentosActivos.subsidioEPS,
+      }
+      
+      const result = await guardarReserva(reservaData)
+      
+      setGuardandoReserva(false)
+      
+      if (result.success) {
+        // Mostrar confirmación
+        setStep(8)
+        window.scrollTo({ top: 0, behavior: "smooth" })
+        
+        // Redirigir al inicio después de 4 segundos
+        setTimeout(() => {
+          reiniciar()
+        }, 4000)
+      } else {
+        const errorMsg = result.error || "Error desconocido al agendar"
+        setError(`⚠️ Por favor, reintente agendar su cita más tarde.\n\nDetalles: ${errorMsg}`)
+        
+        // Mostrar alerta al usuario
+        alert(`Por favor, reintente agendar su cita más tarde.\n\n${errorMsg}`)
+        
+        // Redirigir al inicio después de 3 segundos
+        setTimeout(() => {
+          reiniciar()
+        }, 3000)
+      }
+    } catch (err: any) {
+      setGuardandoReserva(false)
+      
+      const errorMsg = err?.message || "Error desconocido"
+      setError(`⚠️ Por favor, reintente agendar su cita más tarde.\n\nError: ${errorMsg}`)
+      
+      // Mostrar alerta al usuario
+      alert(`Por favor, reintente agendar su cita más tarde.\n\n${errorMsg}`)
+      
+      console.error("Error procesando pago:", err)
+      
+      // Redirigir al inicio después de 3 segundos
+      setTimeout(() => {
+        reiniciar()
+      }, 3000)
     }
   }
 
