@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { validarDireccionCompleta, sanitizarDireccion } from '@/lib/validation/direccion'
 
 // Coordenadas de clínicas y centros de salud en Colombia
 const CLINICAS_COORDS: Record<string, { lat: number; lng: number; ciudad: string }> = {
@@ -94,10 +95,34 @@ function calcularPeajes(distanciaKm: number, ciudad: string): { peajes: { nombre
 
 export async function POST(req: Request) {
   try {
-    const { origen, destino, coordenadasOrigen } = await req.json()
+    const { origen, destino, coordenadasOrigen, origenTipo } = await req.json()
 
     if (!destino) {
       return NextResponse.json({ error: "Destino es requerido" }, { status: 400 })
+    }
+
+    // Validar dirección si el origen es manual
+    let direccionValidada = null
+    let validacionDireccion: { valida: boolean; mensaje?: string } = { valida: true }
+    
+    if (origenTipo === 'manual' && origen) {
+      const validacion = validarDireccionCompleta(origen)
+      validacionDireccion = {
+        valida: validacion.valida,
+        mensaje: validacion.mensaje
+      }
+      
+      if (!validacion.valida) {
+        return NextResponse.json(
+          {
+            error: validacion.mensaje || "Dirección inválida",
+            validacion: validacionDireccion
+          },
+          { status: 400 }
+        )
+      }
+      
+      direccionValidada = validacion.direccionSanitizada
     }
 
     // Buscar coordenadas del destino (clínica)
@@ -118,13 +143,14 @@ export async function POST(req: Request) {
     }
 
     let origenCoords: { lat: number; lng: number }
+    const origenFinal = direccionValidada || origen || ""
     
-    // Si tenemos coordenadas del navegador, usarlas
+    // Si es GPS, usar coordenadas del navegador. Si falla, estimar por ciudad
     if (coordenadasOrigen && coordenadasOrigen.lat && coordenadasOrigen.lng) {
       origenCoords = coordenadasOrigen
     } else {
       // Estimación basada en la ciudad detectada
-      const ciudad = detectarCiudad(origen || "cartagena")
+      const ciudad = detectarCiudad(origenFinal || "cartagena")
       // Coordenadas aproximadas del centro de cada ciudad
       const centrosCiudad: Record<string, { lat: number; lng: number }> = {
         cartagena: { lat: 10.3910, lng: -75.4794 },
@@ -147,7 +173,7 @@ export async function POST(req: Request) {
     )
     
     // Factor de corrección para distancia por carretera (1.3-1.5 típicamente)
-    const esRural = esZonaRural(origen || "")
+    const esRural = esZonaRural(origenFinal || "")
     const factorCorreccion = esRural ? 1.6 : 1.35
     const distanciaKm = Math.round(distanciaLineal * factorCorreccion * 10) / 10
 
@@ -156,7 +182,7 @@ export async function POST(req: Request) {
     const duracionMin = Math.ceil((distanciaKm / velocidadPromedio) * 60)
 
     // Detectar ciudad para peajes
-    const ciudadDetectada = detectarCiudad(origen + " " + destino)
+    const ciudadDetectada = detectarCiudad(origenFinal + " " + destino)
     const peajesInfo = calcularPeajes(distanciaKm, ciudadDetectada)
 
     return NextResponse.json({
@@ -174,14 +200,16 @@ export async function POST(req: Request) {
       peajes: peajesInfo.peajes,
       totalPeajes: peajesInfo.total,
       ruta: {
-        origen: origen || "Tu ubicación",
+        origen: origenFinal || "Tu ubicación",
         destino: clinicaNombre || destino,
         ciudad: ciudadDetectada,
+        origenTipo: origenTipo || 'gps'
       },
       coordenadas: {
         origen: origenCoords,
         destino: destinoCoords,
-      }
+      },
+      validacion: validacionDireccion
     })
   } catch (error) {
     console.error("[v0] Error en API distancia:", error)

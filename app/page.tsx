@@ -35,6 +35,7 @@ import {
   BadgePercent,
   UserPlus,
   X,
+  XCircle,
   Search,
   IdCard,
 } from "lucide-react"
@@ -514,6 +515,10 @@ export default function RutaMedica() {
     cvv: "",
   })
   const [origenDir, setOrigenDir] = useState("")
+  const [origenTipo, setOrigenTipo] = useState<'gps' | 'manual'>('gps')
+  const [direccionValida, setDireccionValida] = useState<boolean | null>(null)
+  const [direccionErrorMsg, setDireccionErrorMsg] = useState("")
+  const debounceValidacion = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Estados para consulta de reservas
   const [mostrarModalReservas, setMostrarModalReservas] = useState(false)
@@ -631,24 +636,61 @@ export default function RutaMedica() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          origen: origenDir || "Mi ubicación actual",
+          origen: origenTipo === 'manual' ? origenDir : "Mi ubicación actual",
           destino: cita.clinica.direccionCompleta,
-          coordenadasOrigen: ubicacionActual,
+          coordenadasOrigen: origenTipo === 'gps' ? ubicacionActual : null,
+          origenTipo,
         }),
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        throw new Error("Error al calcular distancia")
+        const msg = data.error || "Error al calcular distancia"
+        setErrorDistancia(
+          origenTipo === 'manual'
+            ? `${msg}. Intenta activar el GPS o corregir la dirección.`
+            : msg
+        )
+        return
       }
 
-      const data = await res.json()
       setDistanciaInfo(data)
     } catch {
       setErrorDistancia("No se pudo calcular la distancia. Intenta de nuevo.")
     } finally {
       setCalculandoDistancia(false)
     }
-  }, [origenDir, cita.clinica, ubicacionActual])
+  }, [origenDir, origenTipo, cita.clinica, ubicacionActual])
+
+  const validarConDebounce = useCallback((valor: string) => {
+    if (debounceValidacion.current) clearTimeout(debounceValidacion.current)
+    if (!valor.trim()) {
+      setDireccionValida(null)
+      setDireccionErrorMsg("")
+      return
+    }
+    debounceValidacion.current = setTimeout(() => {
+      const trimmed = valor.trim()
+      if (trimmed.length < 3) {
+        setDireccionValida(false)
+        setDireccionErrorMsg("Debe tener al menos 3 caracteres")
+        return
+      }
+      if (trimmed.length > 200) {
+        setDireccionValida(false)
+        setDireccionErrorMsg("No puede exceder 200 caracteres")
+        return
+      }
+      if (!/^[a-zA-Z0-9\s\-.,#áéíóúñÁÉÍÓÚÑ]+$/.test(trimmed)) {
+        setDireccionValida(false)
+        setDireccionErrorMsg("Usa solo letras, números, espacios, guiones, comas, puntos y #")
+        return
+      }
+      setDireccionValida(true)
+      setDireccionErrorMsg("")
+    }, 800)
+  }, [])
 
   // Helpers
   const toggleSintoma = (s: string) =>
@@ -1765,23 +1807,78 @@ export default function RutaMedica() {
                 )}
               </div>
 
-              {/* Input de dirección opcional */}
-              <div className="space-y-1.5 mb-4">
-                <label className="text-sm text-muted-foreground flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Dirección de origen (opcional)
-                </label>
-                <input
-                  ref={origenInputRef}
-                  type="text"
-                  value={origenDir}
-                  onChange={(e) => setOrigenDir(e.target.value)}
-                  placeholder="Ej. Bocagrande Calle 5, Cartagena (o usa tu ubicación actual)"
-                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Si no escribes una dirección, usaremos tu ubicación GPS actual
-                </p>
+              {/* Selección de origen */}
+              <div className="space-y-2 mb-4">
+                <label className="text-sm font-medium">¿Desde dónde te recogemos?</label>
+
+                {/* Opción GPS */}
+                <div
+                  onClick={() => { setOrigenTipo('gps'); setDireccionValida(null); setDireccionErrorMsg("") }}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all",
+                    origenTipo === 'gps' ? "border-emerald-300 bg-emerald-50" : "border-border hover:border-emerald-200 hover:bg-emerald-50/40"
+                  )}
+                >
+                  <div className={cn("h-4 w-4 rounded-full border-2 flex items-center justify-center flex-shrink-0", origenTipo === 'gps' ? "border-emerald-600" : "border-muted-foreground")}>
+                    {origenTipo === 'gps' && <div className="h-2 w-2 rounded-full bg-emerald-600" />}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Navigation className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-medium">Usar mi ubicación actual (GPS)</span>
+                    </div>
+                    <p className={cn("text-xs mt-0.5", ubicacionActual ? "text-emerald-600" : "text-muted-foreground")}>
+                      {obteniendoUbicacion ? "Detectando..." : ubicacionActual ? "Ubicación detectada ✓" : "GPS no disponible"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Opción manual */}
+                <div
+                  onClick={() => setOrigenTipo('manual')}
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-all",
+                    origenTipo === 'manual' ? "border-emerald-300 bg-emerald-50" : "border-border hover:border-emerald-200 hover:bg-emerald-50/40"
+                  )}
+                >
+                  <div className={cn("h-4 w-4 mt-0.5 rounded-full border-2 flex items-center justify-center flex-shrink-0", origenTipo === 'manual' ? "border-emerald-600" : "border-muted-foreground")}>
+                    {origenTipo === 'manual' && <div className="h-2 w-2 rounded-full bg-emerald-600" />}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-medium">Escribir dirección manualmente</span>
+                    </div>
+                    {origenTipo === 'manual' && (
+                      <div className="space-y-1">
+                        <div className="relative">
+                          <input
+                            ref={origenInputRef}
+                            type="text"
+                            value={origenDir}
+                            onChange={(e) => { setOrigenDir(e.target.value); validarConDebounce(e.target.value) }}
+                            placeholder="Ej. Bocagrande Calle 5, Cartagena"
+                            className={cn(
+                              "flex h-10 w-full rounded-xl border bg-background px-3 py-2 pr-9 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              direccionValida === true && "border-emerald-400",
+                              direccionValida === false && "border-red-400",
+                              direccionValida === null && "border-input"
+                            )}
+                          />
+                          {direccionValida === true && <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-emerald-500 pointer-events-none" />}
+                          {direccionValida === false && <XCircle className="absolute right-3 top-3 h-4 w-4 text-red-500 pointer-events-none" />}
+                        </div>
+                        {direccionErrorMsg ? (
+                          <p className="text-xs text-red-600 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />{direccionErrorMsg}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Ej. Bocagrande Calle 5, Cartagena o tu zona</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Destino (clínica seleccionada) */}
@@ -1803,7 +1900,11 @@ export default function RutaMedica() {
               {/* Botón para calcular distancia */}
               <Button
                 onClick={calcularDistancia}
-                disabled={calculandoDistancia || (!ubicacionActual && !origenDir.trim())}
+                disabled={
+                  calculandoDistancia ||
+                  (origenTipo === 'gps' && !ubicacionActual) ||
+                  (origenTipo === 'manual' && direccionValida !== true)
+                }
                 variant="outline"
                 className="w-full mb-4"
               >
